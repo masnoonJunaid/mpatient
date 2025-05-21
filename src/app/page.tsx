@@ -1,103 +1,149 @@
+"use client";
 import Image from "next/image";
 
+import { useEffect, useState, useRef } from "react";
+import { PGlite } from '@electric-sql/pglite'
+
+// const db = new PGlite() // IndexedDB for persistent frontend-only storage
+
+interface Patient {
+  id?: number;
+  name: string;
+  age: number;
+  gender: string;
+}
+
+const db = new PGlite("idb://patient-db"); // IndexedDB for persistent frontend-only storage
+
 export default function Home() {
+
+  const [name, setName] = useState("");
+  const [age, setAge] = useState("");
+  const [gender, setGender] = useState("Male");
+  const [sqlQuery, setSqlQuery] = useState("SELECT * FROM patients;");
+  const [results, setResults] = useState<any[]>([]);
+  const [initialized, setInitialized] = useState(false);
+  const bcRef = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+      runQuery(); 
+      const init = async () => {
+      await db.exec(`
+        CREATE TABLE IF NOT EXISTS patients (
+          id SERIAL PRIMARY KEY,
+          name TEXT,
+          age INTEGER,
+          gender TEXT
+        );
+      `);
+
+      setInitialized(true);
+    };
+    init();
+
+    bcRef.current = new BroadcastChannel("pglite_sync");
+    bcRef.current.onmessage = () => {
+      runQuery();
+    };
+
+    return () => {
+      bcRef.current?.close();
+    };
+  }, []);
+
+  const handleSubmit = async () => {
+  if (!name || !age || isNaN(Number(age))) return;
+
+  // reset inputs
+  const safeName = name.replace(/'/g, "''");
+  const safeGender = gender.replace(/'/g, "''");
+  const safeAge = parseInt(age, 10);
+
+  try {
+    await db.exec(`
+      INSERT INTO patients (name, age, gender) 
+      VALUES ('${safeName}', ${safeAge}, '${safeGender}');
+    `);
+
+    // Broadcast update to other tabs
+    bcRef.current?.postMessage("updated");
+
+    // Clear form and refresh results
+    setName("");
+    setAge("");
+    runQuery();
+  } catch (err) {
+    console.error("Error inserting patient:", err);
+  }
+};
+
+
+
+
+  const runQuery = async () => {
+    const result = await db.query(sqlQuery);
+    setResults(result.rows);
+  };
+
+
+
+
+
+
   return (
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+       <div className="p-4 max-w-xl mx-auto">
+      <h1 className="text-2xl font-bold mb-4">Patient Registration</h1>
+      <div className="mb-4 flex flex-wrap gap-4"> 
+        <input
+          type="text"
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="border p-2 mr-2"
         />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+        <input
+          type="number"
+          placeholder="Age"
+          value={age}
+          onChange={(e) => setAge(e.target.value)}
+          className="border p-2 mr-2"
+        />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+        <select
+          value={gender}
+          onChange={(e) => setGender(e.target.value)}
+          className="border p-2 mr-2"
+        >
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+        <button
+          onClick={handleSubmit}
+          className="bg-blue-500 text-white px-4 py-2"
+        >
+          Register
+        </button>
+      </div>
+
+      <div className="mb-4">
+        <textarea
+          rows={3}
+          value={sqlQuery}
+          onChange={(e) => setSqlQuery(e.target.value)}
+          className="w-full border p-2"
+        />
+        <button
+          onClick={runQuery}
+          className="bg-green-500 text-white px-4 py-2 mt-2"
+        >
+          Run SQL
+        </button>
+      </div>
+    </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
