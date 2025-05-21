@@ -27,15 +27,15 @@ export default function Home() {
 
   useEffect(() => {
       runQuery(); 
-      const init = async () => {
+    const init = async () => {
       await db.exec(`
-        CREATE TABLE IF NOT EXISTS patients (
-          id SERIAL PRIMARY KEY,
-          name TEXT,
-          age INTEGER,
-          gender TEXT
-        );
-      `);
+  CREATE TABLE IF NOT EXISTS patients (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    age INTEGER,
+    gender TEXT
+  );
+`);
 
       setInitialized(true);
     };
@@ -142,6 +142,31 @@ export default function Home() {
           Run SQL
         </button>
       </div>
+
+      <h2 className="text-xl font-semibold mt-6 mb-2">Results</h2>
+      <table className="w-full border max-h-[20vh] overflow-y-auto">
+        <thead>
+          <tr>
+            {results[0] &&
+              Object.keys(results[0]).map((col) => (
+                <th key={col} className="border px-2 py-1 text-left">
+                  {col}
+                </th>
+              ))}
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((row, i) => (
+            <tr key={i}>
+              {Object.values(row).map((val, j) => (
+                <td key={j} className="border px-2 py-1">
+                  {val as string}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
       </main>
     </div>
